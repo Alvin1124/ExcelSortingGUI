@@ -1,0 +1,222 @@
+using Excel = Microsoft.Office.Interop.Excel;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Windows.Forms;
+
+namespace ExcelSorting
+{
+    public partial class Form1 : Form
+    {
+        private string folderPath; // To store the selected folder path
+        private TextBox txtFolderPath;
+        private Button btnOpenFolder;
+        private Button btnRun;
+
+        public Form1()
+        {
+            InitializeComponent();
+            InitializeCustomComponents();
+        }
+
+        private void InitializeCustomComponents()
+        {
+            // Initialize TextBox
+            txtFolderPath = new TextBox
+            {
+                Location = new System.Drawing.Point(20, 20),
+                Width = 250
+            };
+
+            // Initialize Button
+            btnOpenFolder = new Button
+            {
+                Text = "Open Folder",
+                Location = new System.Drawing.Point(20, 60),
+                Width = 100
+            };
+
+            btnRun = new Button
+            {
+                Text = "Run",
+                Location = new System.Drawing.Point(20, 100),
+                Width = 100
+            };
+
+            // Attach event handler
+            btnOpenFolder.Click += btnOpenFolder_Click;
+            btnRun.Click += btnRun_Click;
+
+            // Add controls to the form
+            Controls.Add(txtFolderPath);
+            Controls.Add(btnOpenFolder);
+        }
+
+        private void btnOpenFolder_Click(object sender, EventArgs e)
+        {
+            using (FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog())
+            {
+                if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+                {
+                    folderPath = folderBrowserDialog.SelectedPath;
+                    txtFolderPath.Text = folderPath; // Display the selected folder path in the TextBox
+                }
+            }
+        }
+        private void btnRun_Click(object sender, EventArgs e)
+        {
+            //MessageBox.Show("Run button clicked!");
+
+            string selectedFolderPath = txtFolderPath.Text; // Get the folder path from the TextBox
+            if (string.IsNullOrEmpty(selectedFolderPath))
+            {
+                MessageBox.Show("Please select a folder first.");
+                return;
+            }
+            MessageBox.Show($"Selected Folder: {selectedFolderPath}");
+            // Call the method to process the Excel files
+            SortExcelFile(selectedFolderPath);
+        }
+
+        //#########################################################################################################################################################
+        //#########################################################################################################################################################
+        //#########################################################################################################################################################
+        //#########################################################################################################################################################
+        //#########################################################################################################################################################
+
+        private void SortExcelFile(string folderPath)
+        {
+            // Define the path for the new folder to store modified files
+            string modifiedFolderPath = Path.Combine(folderPath, "ModifiedFiles");
+
+            // Create the folder for modified files if it does not exist
+            if (!Directory.Exists(modifiedFolderPath))
+            {
+                Directory.CreateDirectory(modifiedFolderPath);
+            }
+
+            // Get all Excel files in the specified folder, ignoring temporary files that start with '~$'
+            string[] excelFiles = Directory.GetFiles(folderPath, "*.xlsx");
+
+            // Start Excel application
+            Excel.Application excelApp = new Excel.Application();
+            excelApp.Visible = false;
+
+            // Create a new empty Excel workbook to store highlighted counts
+            Excel.Workbook emptyWorkbook = excelApp.Workbooks.Add();
+            Excel._Worksheet emptyWorksheet = (Excel._Worksheet)emptyWorkbook.Sheets[1];
+            string emptyFilePath = Path.Combine(modifiedFolderPath, "HighlightedCounts.xlsx");
+            emptyWorksheet.Cells[1, 1].Value2 = "Name";
+            emptyWorksheet.Cells[1, 2].Value2 = "Highlighted Count";
+
+            int rowCounter = 2; // Row counter for storing highlighted counts
+
+            foreach (var currentFilePath in excelFiles) // Renamed filePath to currentFilePath
+            {
+                // Skip temporary Excel files that start with '~$'
+                if (Path.GetFileName(currentFilePath).StartsWith("~$"))
+                    continue;
+
+                // Open each Excel file
+                Excel.Workbook workbook = excelApp.Workbooks.Open(currentFilePath);
+
+                // Check if the file is read-only
+                if (workbook.ReadOnly)
+                {
+                    MessageBox.Show($"{Path.GetFileName(currentFilePath)} is read-only. Saving as a new file.");
+                }
+
+                Excel._Worksheet worksheet = (Excel._Worksheet)workbook.Sheets[1];
+
+                // Find the last row with data in column C
+                int lastRow = worksheet.Cells[worksheet.Rows.Count, 3].End(Excel.XlDirection.xlUp).Row;
+
+                // Find the last column with data
+                int lastColumn = worksheet.Cells[1, worksheet.Columns.Count].End(Excel.XlDirection.xlToLeft).Column;
+
+                // Set the full data range from A2 to the last column and last row
+                Excel.Range dataRange = worksheet.Range[$"A2", worksheet.Cells[lastRow, lastColumn]];
+
+                // Sort the entire data range by column C in ascending order
+                dataRange.Sort(
+                    dataRange.Columns[3], // Use column C as the primary sort key
+                    Excel.XlSortOrder.xlAscending,
+                    Type.Missing, Type.Missing, Excel.XlSortOrder.xlAscending,
+                    Type.Missing, Excel.XlSortOrder.xlAscending,
+                    Excel.XlYesNoGuess.xlNo, Type.Missing, Type.Missing,
+                    Excel.XlSortOrientation.xlSortColumns,
+                    Excel.XlSortMethod.xlPinYin, Excel.XlSortDataOption.xlSortNormal
+                );
+
+                // Create a HashSet to keep track of which values have already been encountered
+                HashSet<object> encounteredValues = new HashSet<object>();
+                int highlightedCount = 0; // Counter for highlighted cells
+
+                // Loop through the entire data range
+                for (int i = 1; i <= lastRow - 1; i++) // Start at row 2 because row 1 is likely a header
+                {
+                    Excel.Range cellB = (Excel.Range)worksheet.Cells[i + 1, 2]; // Column B (Waybill number)
+                    Excel.Range cellC = (Excel.Range)worksheet.Cells[i + 1, 3]; // Column C (Order number)
+
+                    object cellValueB = cellB.Value2;
+                    object cellValueC = cellC.Value2;
+
+                    // Skip if either column B or column C is empty
+                    if (cellValueB == null || cellValueC == null)
+                        continue;
+
+                    string waybill = cellValueB.ToString();
+                    string orderNumber = cellValueC.ToString();
+
+                    // Check if the waybill number starts with "6666"
+                    if (waybill.StartsWith("6666"))
+                    {
+                        // If the waybill ends with "1", highlight the corresponding column C value
+                        if (waybill.EndsWith("1"))
+                        {
+                            cellC.Interior.Color = Excel.XlRgbColor.rgbYellow;
+                            highlightedCount++;
+                        }
+                    }
+                    else
+                    {
+                        // For waybill numbers that do NOT start with "6666"
+                        if (!encounteredValues.Contains(orderNumber))
+                        {
+                            // Highlight the first occurrence of the order number in column C
+                            cellC.Interior.Color = Excel.XlRgbColor.rgbYellow;
+                            highlightedCount++;
+                            encounteredValues.Add(orderNumber);
+                        }
+                    }
+                }
+
+                // Insert the highlighted count in column C, two rows below the last data row, with "points" appended
+                worksheet.Cells[lastRow + 2, 3].Value2 = $"{highlightedCount} points";
+
+                // Save the workbook with a new name in the modified files folder
+                string newFilePath = Path.Combine(modifiedFolderPath, $"{Path.GetFileNameWithoutExtension(currentFilePath)}_modified.xlsx");
+                workbook.SaveAs(newFilePath);
+
+                // Write the file name and highlighted count to the empty workbook
+                emptyWorksheet.Cells[rowCounter, 1].Value2 = Path.GetFileName(newFilePath);
+                emptyWorksheet.Cells[rowCounter, 2].Value2 = highlightedCount;
+                rowCounter++; // Move to the next row for the next entry
+
+                // Close the workbook
+                workbook.Close(false);
+            }
+
+            // Save the empty workbook with highlighted counts
+            emptyWorkbook.SaveAs(emptyFilePath);
+            MessageBox.Show($"Saved highlighted counts in file: {emptyFilePath}");
+
+            // Close the empty workbook
+            emptyWorkbook.Close(false);
+
+            // Quit Excel application
+            excelApp.Quit();
+            MessageBox.Show("All Excel files in the folder have been processed and saved in the 'ModifiedFiles' folder.");
+        }
+    }
+}
