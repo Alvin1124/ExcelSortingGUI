@@ -1,0 +1,66 @@
+using System;
+using System.IO;
+using System.Windows.Forms;
+
+namespace ExcelSorting
+{
+    public partial class Form1 : Form
+    {
+        private string folderPath; // To store the selected folder path
+        private TextBox txtFolderPath;
+        private Button btnOpenFolder;
+
+        public Form1()
+        {
+            InitializeComponent();
+            InitializeCustomComponents();
+        }
+
+        private void InitializeCustomComponents()
+        {
+            // Initialize TextBox
+            txtFolderPath = new TextBox
+            {
+                Location = new System.Drawing.Point(20, 20),
+                Width = 250
+            };
+
+            // Initialize Button
+            btnOpenFolder = new Button
+            {
+                Text = "Open Folder",
+                Location = new System.Drawing.Point(20, 60),
+                Width = 100
+            };
+
+            // Attach event handler
+            btnOpenFolder.Click += btnOpenFolder_Click;
+
+            // Add controls to the form
+            Controls.Add(txtFolderPath);
+            Controls.Add(btnOpenFolder);
+        }
+
+        private void btnOpenFolder_Click(object sender, EventArgs e)
+        {
+            using (FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog())
+            {
+                if (folderBrowserDialog.ShowDialog() == DialogResult.OK)
+                {
+                    folderPath = folderBrowserDialog.SelectedPath;
+                    txtFolderPath.Text = folderPath; // Display the selected folder path in the TextBox
+                }
+            }
+        }
+        private void btnRun_Click(object sender, EventArgs e)
+        {
+            string filePath = txtFolderPath.Text; // Assume this text box displays the folder path
+            SortExcelFile(filePath);
+        }
+
+        private void SortExcelFile(string filePath)
+        {
+            
+        }
+    }
+}
